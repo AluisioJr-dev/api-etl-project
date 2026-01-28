@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arquiteturas GCP - Cat Facts Pipeline</title>
+<script src="js/mermaid.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+padding: 20px;
+min-height: 100vh;
+}
+.container { max-width: 1400px; margin: 0 auto; }
+header {
+text-align: center;
+color: white;
+margin-bottom: 30px;
+}
+header h1 {
+font-size: 2.5rem;
+margin-bottom: 10px;
+text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+header p {
+font-size: 1.2rem;
+opacity: 0.9;
+}
+.tabs {
+display: flex;
+gap: 10px;
+margin-bottom: 20px;
+justify-content: center;
+}
+.tab-btn {
+background: white;
+border: none;
+padding: 15px 30px;
+border-radius: 10px 10px 0 0;
+font-size: 1.1rem;
+font-weight: 600;
+cursor: pointer;
+transition: all 0.3s;
+box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.tab-btn:hover {
+transform: translateY(-2px);
+box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+.tab-btn.active {
+background: #4285f4;
+color: white;
+}
+.diagram-container {
+background: white;
+border-radius: 15px;
+padding: 40px;
+box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+margin-bottom: 20px;
+display: none;
+}
+.diagram-container.active {
+display: block;
+animation: fadeIn 0.5s;
+}
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(20px); }
+to { opacity: 1; transform: translateY(0); }
+}
+.diagram-header {
+text-align: center;
+margin-bottom: 30px;
+}
+.diagram-header h2 {
+font-size: 2rem;
+color: #333;
+margin-bottom: 10px;
+}
+.badge {
+display: inline-block;
+padding: 8px 20px;
+border-radius: 20px;
+font-size: 0.9rem;
+font-weight: 600;
+margin: 5px;
+}
+.badge-serverless { background: #4285f4; color: white; }
+.badge-enterprise { background: #673ab7; color: white; }
+.badge-cost { background: #34a853; color: white; }
+.badge-cost-high { background: #ea4335; color: white; }
+.mermaid {
+text-align: center;
+background: #f8f9fa;
+padding: 20px;
+border-radius: 10px;
+margin: 20px 0;
+}
+.info-box {
+background: #e8f4fd;
+border-left: 4px solid #4285f4;
+padding: 20px;
+margin: 20px 0;
+border-radius: 5px;
+}
+.info-box h3 {
+color: #1967d2;
+margin-bottom: 10px;
+}
+.info-box ul {
+list-style: none;
+padding: 0;
+}
+.info-box li {
+padding: 8px 0;
+color: #333;
+}
+footer {
+text-align: center;
+color: white;
+margin-top: 30px;
+padding: 20px;
+opacity: 0.9;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<h1>🏗️ Arquiteturas GCP</h1>
+<p>Cat Facts Data Pipeline | Questão 2 - UOLCatLovers</p>
+</header>
+
+<div class="tabs">
+<button class="tab-btn active" onclick="showDiagram('comparison')">📊 Comparação</button>
+<button class="tab-btn" onclick="showDiagram('serverless')">🔄 Serverless</button>
+<button class="tab-btn" onclick="showDiagram('airflow')">🏢 Airflow</button>
+</div>
+
+<div id="comparison" class="diagram-container active">
+<div class="diagram-header">
+<h2>📊 Comparação Side-by-Side</h2>
+<span class="badge badge-serverless">Serverless: $3-5/mês</span>
+<span class="badge badge-cost-high">Airflow: $350-400/mês</span>
+</div>
+
+<div class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'12px'}}}%%
+graph TB
+subgraph Legend["📌 LEGENDA"]
+L1[🥉 Bronze: Raw Data]
+L2[🥈 Silver: Processed]
+L3[🥇 Gold: Analytics]
+end
+
+subgraph ServerlessArch["🔄 ARQUITETURA SERVERLESS - Scheduler + Functions"]
+direction TB
+S_Start([⏰ Cloud Scheduler<br/>Cron: @daily])
+subgraph S_Bronze["🥉 BRONZE"]
+S_CF1[Cloud Function<br/>extract_cat_facts<br/>256MB - 60s]
+S_API{{API External}}
+S_GCS_B[(GCS Bronze<br/>JSON)]
+end
+subgraph S_Silver["🥈 SILVER"]
+S_CF2[Cloud Function<br/>transform_to_silver<br/>512MB - Pandas]
+S_GCS_S[(GCS Silver<br/>Parquet)]
+end
+subgraph S_Gold["🥇 GOLD"]
+S_CF3[Cloud Function<br/>load_to_gold<br/>512MB - BQ SDK]
+S_BQ[(BigQuery<br/>Analytics)]
+end
+S_Start -->|HTTP| S_CF1
+S_CF1 --> S_API
+S_CF1 --> S_GCS_B
+S_GCS_B -->|Event| S_CF2
+S_CF2 --> S_GCS_S
+S_GCS_S -->|Event| S_CF3
+S_CF3 --> S_BQ
+end
+
+subgraph AirflowArch["🏢 ARQUITETURA ENTERPRISE - Composer + Airflow"]
+direction TB
+A_Start([☁️ Cloud Composer<br/>Managed Airflow])
+A_DAG[📜 DAG<br/>7 tasks - Retries]
+subgraph A_Bronze["🥉 BRONZE"]
+A_T1[Task 1: extract_api]
+A_T2[Task 2: validate_data]
+A_GCS_B[(GCS Bronze)]
+end
+subgraph A_Silver["🥈 SILVER"]
+A_T3[Task 3: transform_dataflow]
+A_GCS_S[(GCS Silver)]
+end
+subgraph A_Gold["🥇 GOLD"]
+A_T5[Task 5: load_bigquery]
+A_T6[Task 6: aggregate_stats]
+A_BQ[(BigQuery)]
+end
+A_Start --> A_DAG
+A_DAG --> A_T1
+A_T1 --> A_GCS_B
+A_GCS_B --> A_T2
+A_T2 --> A_T3
+A_T3 --> A_GCS_S
+A_GCS_S --> A_T5
+A_T5 --> A_T6
+A_T6 --> A_BQ
+end
+
+classDef serverlessStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
+classDef airflowStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:3px
+class ServerlessArch serverlessStyle
+class AirflowArch airflowStyle
+</div>
+
+<table style="width:100%; margin: 30px 0; border-collapse: collapse; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+<thead>
+<tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+<th style="padding: 15px; text-align: left; border: 1px solid #ddd;">Critério</th>
+<th style="padding: 15px; text-align: center; border: 1px solid #ddd; background: #1976d2;">🔄 Serverless</th>
+<th style="padding: 15px; text-align: center; border: 1px solid #ddd; background: #7b1fa2;">🏢 Airflow</th>
+</tr>
+</thead>
+<tbody>
+<tr style="background: #f9f9f9;">
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">💰 Custo Mensal</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd; color: #0d47a1; font-weight: bold;">$3-5</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5; color: #4a148c; font-weight: bold;">$350-400</td>
+</tr>
+<tr>
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">⚙️ Complexidade</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Baixa ✅</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Alta ⚠️</td>
+</tr>
+<tr style="background: #f9f9f9;">
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">⏱️ Setup Time</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">~5 minutos</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">~30 minutos</td>
+</tr>
+<tr>
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">🔧 Manutenção</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Zero</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Moderada</td>
+</tr>
+<tr style="background: #f9f9f9;">
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">📊 Observabilidade</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Cloud Logging</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Airflow UI + Logs</td>
+</tr>
+<tr>
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">🔄 Orquestração</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Event-driven</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">DAG-based ✅</td>
+</tr>
+<tr style="background: #f9f9f9;">
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">📈 Escalabilidade</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Auto ✅</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Auto ✅</td>
+</tr>
+<tr>
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">🎯 Ideal para</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Pipelines simples</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Pipelines complexos</td>
+</tr>
+<tr style="background: #f9f9f9;">
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">👥 Equipe</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">Pequena ✅</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">Grande/Experiente</td>
+</tr>
+<tr>
+<td style="padding: 12px; border: 1px solid #ddd; font-weight: 600;">📦 Volume de Dados</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #e3f2fd;">< 1 GB/dia ✅</td>
+<td style="padding: 12px; border: 1px solid #ddd; text-align: center; background: #f3e5f5;">> 10 GB/dia ✅</td>
+</tr>
+</tbody>
+</table>
+
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 10px; margin: 30px 0;">
+<h3 style="margin: 0 0 15px 0; font-size: 1.5rem;">📈 Análise de Escalabilidade - Cloud Functions</h3>
+<p style="margin: 0 0 20px 0; opacity: 0.95;">Como a solução Serverless se comporta com crescimento de volume?</p>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+<div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; backdrop-filter: blur(10px);">
+<div style="font-size: 2rem; margin-bottom: 5px;">⏱️</div>
+<div style="font-weight: 600; margin-bottom: 5px;">Timeout Máximo</div>
+<div style="font-size: 1.3rem; font-weight: bold;">60 minutos</div>
+<div style="font-size: 0.85rem; opacity: 0.9;">Cloud Functions 2nd Gen</div>
+</div>
+<div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; backdrop-filter: blur(10px);">
+<div style="font-size: 2rem; margin-bottom: 5px;">💾</div>
+<div style="font-weight: 600; margin-bottom: 5px;">Memória Máxima</div>
+<div style="font-size: 1.3rem; font-weight: bold;">32 GB</div>
+<div style="font-size: 0.85rem; opacity: 0.9;">Por instância</div>
+</div>
+<div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; backdrop-filter: blur(10px);">
+<div style="font-size: 2rem; margin-bottom: 5px;">🚀</div>
+<div style="font-weight: 600; margin-bottom: 5px;">Concorrência</div>
+<div style="font-size: 1.3rem; font-weight: bold;">1000 instâncias</div>
+<div style="font-size: 0.85rem; opacity: 0.9;">Por região (padrão)</div>
+</div>
+<div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; backdrop-filter: blur(10px);">
+<div style="font-size: 2rem; margin-bottom: 5px;">📦</div>
+<div style="font-weight: 600; margin-bottom: 5px;">Storage /tmp</div>
+<div style="font-size: 1.3rem; font-weight: bold;">512 MB</div>
+<div style="font-size: 0.85rem; opacity: 0.9;">Efêmero</div>
+</div>
+</div>
+
+<div style="background: white; color: #333; padding: 20px; border-radius: 8px;">
+<h4 style="margin: 0 0 15px 0; color: #1976d2;">📊 Matriz de Escalabilidade</h4>
+<table style="width: 100%; border-collapse: collapse;">
+<thead>
+<tr style="background: #f5f5f5;">
+<th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Volume Diário</th>
+<th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Solução</th>
+<th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Custo/mês</th>
+<th style="padding: 10px; text-align: center; border-bottom: 2px solid #ddd;">Complexidade</th>
+</tr>
+</thead>
+<tbody>
+<tr style="background: #e3f2fd;">
+<td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>&lt; 100 MB</strong></td>
+<td style="padding: 10px; border-bottom: 1px solid #ddd;">✅ Cloud Functions</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd; font-weight: bold;">$3-8</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">Baixa</td>
+</tr>
+<tr>
+<td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>100 MB - 1 GB</strong></td>
+<td style="padding: 10px; border-bottom: 1px solid #ddd;">⚡ Cloud Run</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd; font-weight: bold;">$10-20</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">Baixa</td>
+</tr>
+<tr style="background: #f9f9f9;">
+<td style="padding: 10px; border-bottom: 1px solid #ddd;"><strong>1 GB - 10 GB</strong></td>
+<td style="padding: 10px; border-bottom: 1px solid #ddd;">🚀 Dataflow</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd; font-weight: bold;">$50-100</td>
+<td style="padding: 10px; text-align: center; border-bottom: 1px solid #ddd;">Média</td>
+</tr>
+<tr>
+<td style="padding: 10px;"><strong>&gt; 10 GB</strong></td>
+<td style="padding: 10px;">🏢 Composer + Dataflow</td>
+<td style="padding: 10px; text-align: center; font-weight: bold;">$350-500</td>
+<td style="padding: 10px; text-align: center;">Alta</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div style="margin-top: 20px; padding: 15px; background: rgba(76, 175, 80, 0.2); border-left: 4px solid #4caf50; border-radius: 5px;">
+<div style="font-weight: 600; margin-bottom: 8px;">✅ Para Cat Facts (50 KB/dia):</div>
+<div style="font-size: 0.95rem; line-height: 1.6;">
+• Margem de crescimento: <strong>2000x</strong> antes de precisar migrar<br>
+• Pode escalar até <strong>100 MB/dia</strong> sem modificações<br>
+• Com otimizações: até <strong>1 GB/dia</strong> (batching + streaming)<br>
+• <strong>Solução totalmente adequada!</strong> 🎯
+</div>
+</div>
+
+<div style="margin-top: 15px; padding: 15px; background: rgba(255, 193, 7, 0.2); border-left: 4px solid #ffc107; border-radius: 5px;">
+<div style="font-weight: 600; margin-bottom: 8px;">🔄 Caminho de Migração:</div>
+<div style="font-size: 0.95rem; line-height: 1.6;">
+Se crescer: Cloud Functions → Cloud Run (fácil) → Dataflow (médio) → Composer (complexo)
+</div>
+</div>
+
+<div style="margin-top: 15px; text-align: center; font-size: 0.85rem; opacity: 0.9;">
+📚 Baseado em: <a href="https://cloud.google.com/functions/quotas" style="color: white; text-decoration: underline;">Cloud Functions Quotas</a> | 
+<a href="https://cloud.google.com/functions/docs/concepts/execution-environment" style="color: white; text-decoration: underline;">Execution Environment</a>
+</div>
+</div>
+
+<div class="info-box">
+<h3>✅ Recomendação para Cat Facts</h3>
+<p><strong>Escolha: SERVERLESS</strong></p>
+<ul>
+<li>✅ Volume: 327 records/dia (~50 KB) - muito pequeno</li>
+<li>✅ Custo: 98% mais barato ($5 vs $400)</li>
+<li>✅ Simplicidade: Pipeline linear sem complexidade</li>
+<li>✅ Manutenção: Praticamente zero</li>
+</ul>
+</div>
+</div>
+
+<div id="serverless" class="diagram-container">
+<div class="diagram-header">
+<h2>🔄 Arquitetura Serverless</h2>
+<span class="badge badge-serverless">Cloud Scheduler + Functions</span>
+<span class="badge badge-cost">$3-5/mês</span>
+</div>
+
+<div class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'14px'}}}%%
+graph TB
+Start([Inicio<br/>09:00 UTC Diario])
+Scheduler[Cloud Scheduler<br/>Cron Job<br/>schedule: 0 9 * * *]
+subgraph Bronze["BRONZE LAYER - Raw Data Ingestion"]
+direction TB
+CF1[Cloud Function 1<br/>extract_cat_facts<br/>Runtime: Python 3.11<br/>Memory: 256MB<br/>Timeout: 60s]
+API{{External API<br/>catfact.ninja/facts<br/>327 records}}
+Validate1{Validacao<br/>Status 200?}
+GCS_Bronze[(GCS Bronze<br/>cat-facts-bronze<br/>Format: JSON<br/>Lifecycle: 90d to Nearline)]
+end
+subgraph Silver["SILVER LAYER - Data Transformation"]
+direction TB
+Event1[Event Trigger<br/>finalize/create]
+CF2[Cloud Function 2<br/>transform_to_silver<br/>Runtime: Python 3.11<br/>Memory: 512MB<br/>Pandas + PyArrow]
+Transform[Processing<br/>Parse JSON<br/>Add timestamps<br/>Deduplicate<br/>Convert to Parquet]
+GCS_Silver[(GCS Silver<br/>cat-facts-silver<br/>Format: Parquet<br/>Compression: Snappy)]
+end
+subgraph Gold["GOLD LAYER - Analytics Ready"]
+direction TB
+Event2[Event Trigger<br/>finalize/create]
+CF3[Cloud Function 3<br/>load_to_gold<br/>Runtime: Python 3.11<br/>Memory: 512MB<br/>BigQuery Client]
+Load[Load Process<br/>Schema validation<br/>Partitioned insert<br/>Clustering by fact]
+BQ[(BigQuery<br/>cat_facts_dataset<br/>Table: facts_raw<br/>Partition: DAILY<br/>Cluster: fact)]
+end
+subgraph Monitor["Observability Stack"]
+direction LR
+Logs[Cloud Logging<br/>All function logs]
+Metrics[Cloud Monitoring<br/>Invocations, errors, latency]
+Alerts[Alerting<br/>Email/Slack on failures]
+end
+Start --> Scheduler
+Scheduler -->|HTTP POST| CF1
+CF1 --> API
+API --> Validate1
+Validate1 -->|Success| GCS_Bronze
+Validate1 -->|Error| Logs
+GCS_Bronze --> Event1
+Event1 -->|Trigger| CF2
+CF2 --> Transform
+Transform --> GCS_Silver
+GCS_Silver --> Event2
+Event2 -->|Trigger| CF3
+CF3 --> Load
+Load --> BQ
+CF1 -.->|Stream logs| Logs
+CF2 -.->|Stream logs| Logs
+CF3 -.->|Stream logs| Logs
+Logs -->|Export| Metrics
+Metrics -->|Conditions| Alerts
+classDef trigger fill:#4285f4,stroke:#1967d2,stroke-width:3px,color:#fff
+classDef bronze fill:#34a853,stroke:#188038,stroke-width:3px,color:#fff
+classDef silver fill:#fbbc04,stroke:#f9ab00,stroke-width:3px,color:#000
+classDef gold fill:#ea4335,stroke:#c5221f,stroke-width:3px,color:#fff
+classDef storage fill:#e8f0fe,stroke:#4285f4,stroke-width:2px
+classDef monitor fill:#f1f3f4,stroke:#5f6368,stroke-width:2px
+class Start,Scheduler trigger
+class CF1,Validate1,API bronze
+class Event1,CF2,Transform silver
+class Event2,CF3,Load gold
+class GCS_Bronze,GCS_Silver,BQ storage
+class Logs,Metrics,Alerts monitor
+</div>
+
+<div class="info-box">
+<h3>✅ Vantagens</h3>
+<ul>
+<li>💰 Custo extremamente baixo (~$3-5/mês)</li>
+<li>⚡ Serverless: Zero infraestrutura</li>
+<li>🔄 Auto-scaling automático</li>
+<li>🎯 Event-driven: Reação automática</li>
+<li>🛠️ Simplicidade: Fácil de manter</li>
+</ul>
+</div>
+</div>
+
+<div id="airflow" class="diagram-container">
+<div class="diagram-header">
+<h2>🏢 Arquitetura Enterprise</h2>
+<span class="badge badge-enterprise">Cloud Composer + Airflow</span>
+<span class="badge badge-cost-high">$350-400/mês</span>
+</div>
+
+<div class="mermaid">
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'14px'}}}%%
+graph TB
+Composer[Cloud Composer 2.7<br/>Managed Airflow<br/>Kubernetes Engine<br/>Auto-scaling workers]
+DAG[DAG: cat_facts_medallion<br/>Schedule: @daily<br/>Max Active Runs: 1<br/>Retries: 3]
+subgraph Bronze["BRONZE LAYER - Extraction & Validation"]
+direction TB
+T1[Task 1: extract_api<br/>PythonOperator<br/>GET catfact.ninja/facts<br/>Save raw JSON]
+T2[Task 2: validate_data<br/>PythonOperator<br/>Schema validation<br/>Quality checks]
+GCS_B[(GCS Bronze<br/>cat-facts-bronze<br/>Format: JSON<br/>Version: enabled)]
+end
+subgraph Silver["SILVER LAYER - Transformation"]
+direction TB
+T3[Task 3: transform_dataflow<br/>DataflowPythonOperator<br/>Apache Beam job<br/>Distributed processing]
+Beam{{Apache Beam<br/>Parallel workers<br/>Auto-scaling}}
+GCS_S[(GCS Silver<br/>cat-facts-silver<br/>Format: Parquet<br/>Partitioned by date)]
+end
+subgraph Gold["GOLD LAYER - Analytics"]
+direction TB
+T4[Task 4: quality_check<br/>PythonOperator<br/>Data quality metrics<br/>Anomaly detection]
+T5[Task 5: load_bigquery<br/>BigQueryOperator<br/>Load facts_raw<br/>Partitioned insert]
+T6[Task 6: aggregate_stats<br/>BigQueryOperator<br/>Daily aggregations<br/>Summary tables]
+BQ[(BigQuery<br/>cat_facts_dataset<br/>Tables: 3<br/>Partition: DAILY<br/>Cluster: fact)]
+end
+subgraph Notify["Notifications"]
+T7[Task 7: send_notification<br/>SlackWebhookOperator<br/>Success/Failure alerts<br/>Pipeline metrics]
+Slack{{Slack Channel<br/>Real-time alerts}}
+end
+subgraph Monitor["Observability"]
+direction LR
+AirflowUI[Airflow UI<br/>DAG visualization<br/>Task logs<br/>XCom browser]
+CloudMon[Cloud Monitoring<br/>SLA tracking<br/>Resource metrics<br/>Custom dashboards]
+CloudLog[Cloud Logging<br/>Centralized logs<br/>Error tracking<br/>Audit trail]
+end
+Composer --> DAG
+DAG --> T1
+T1 --> GCS_B
+GCS_B --> T2
+T2 -->|Valid| T3
+T2 -->|Invalid| T7
+T3 --> Beam
+Beam --> GCS_S
+GCS_S --> T4
+T4 -->|OK| T5
+T4 -->|Issues| T7
+T5 --> BQ
+T6 --> BQ
+T5 --> T6
+T6 --> T7
+T7 --> Slack
+Composer -.->|UI Access| AirflowUI
+DAG -.->|Metrics| CloudMon
+T1 -.->|Logs| CloudLog
+T3 -.->|Logs| CloudLog
+T5 -.->|Logs| CloudLog
+T6 -.->|Logs| CloudLog
+CloudLog -.->|Export| CloudMon
+classDef orchestration fill:#673ab7,stroke:#4527a0,stroke-width:3px,color:#fff
+classDef bronze fill:#34a853,stroke:#188038,stroke-width:3px,color:#fff
+classDef silver fill:#fbbc04,stroke:#f9ab00,stroke-width:3px,color:#000
+classDef gold fill:#ea4335,stroke:#c5221f,stroke-width:3px,color:#fff
+classDef storage fill:#e8f0fe,stroke:#4285f4,stroke-width:2px
+classDef notify fill:#ff6f00,stroke:#e65100,stroke-width:2px,color:#fff
+classDef monitor fill:#f1f3f4,stroke:#5f6368,stroke-width:2px
+class Composer,DAG orchestration
+class T1,T2,GCS_B bronze
+class T3,Beam,GCS_S silver
+class T4,T5,T6,BQ gold
+class T7,Slack notify
+class AirflowUI,CloudMon,CloudLog monitor
+</div>
+
+<div class="info-box">
+<h3>✅ Vantagens</h3>
+<ul>
+<li>🎨 UI Visual: Airflow UI completa</li>
+<li>🔄 Orquestração: Controle total</li>
+<li>📊 Observabilidade: Logs/métricas integrados</li>
+<li>🔧 Flexibilidade: Suporta fluxos complexos</li>
+<li>🚀 Escalabilidade: Auto-scaling de workers</li>
+<li>🔌 Integrações: 200+ operators</li>
+</ul>
+</div>
+</div>
+
+<footer>
+<p>📅 Data: 27/01/2026 | 📝 Projeto: UOLCatLovers - Questão 2</p>
+</footer>
+</div>
+
+<script>
+mermaid.initialize({ 
+startOnLoad: false,
+theme: 'base',
+themeVariables: {
+fontSize: '14px'
+}
+});
+
+window.addEventListener('DOMContentLoaded', function() {
+const activeTab = document.querySelector('.diagram-container.active');
+if (activeTab) {
+const mermaidEl = activeTab.querySelector('.mermaid');
+if (mermaidEl && !mermaidEl.classList.contains('rendered')) {
+mermaid.run({nodes: [mermaidEl]}).then(() => {
+mermaidEl.classList.add('rendered');
+});
+}
+}
+});
+
+function showDiagram(diagramId) {
+document.querySelectorAll('.diagram-container').forEach(container => {
+container.classList.remove('active');
+});
+document.querySelectorAll('.tab-btn').forEach(btn => {
+btn.classList.remove('active');
+});
+const selectedContainer = document.getElementById(diagramId);
+selectedContainer.classList.add('active');
+event.target.classList.add('active');
+const mermaidEl = selectedContainer.querySelector('.mermaid');
+if (mermaidEl && !mermaidEl.classList.contains('rendered')) {
+mermaid.run({nodes: [mermaidEl]}).then(() => {
+mermaidEl.classList.add('rendered');
+});
+}
+}
+</script>
+</body>
+</html>
